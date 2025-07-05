@@ -1,0 +1,5 @@
+{
+  "name": "Moodle RAG Chatbot",
+  "description": "An AI conversational assistant with knowledge exclusively from your Moodle documentation PDFs. Upload your files and ask questions to get answers based strictly on the provided corpus.",
+  "requestFramePermissions": []
+}
