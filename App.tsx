@@ -1,22 +1,16 @@
-import React, { useState, useCallback, useMemo } from 'react';
+
+import React, { useState, useCallback } from 'react';
 import { AppStatus, ChatMessage, MessageSender, Source } from './types';
 import { AppTitle, MoodleIcon, TrashIcon, ReloadIcon } from './constants';
 import PdfUploader from './components/PdfUploader';
 import ChatInterface from './components/ChatInterface';
-import ConfigNeededScreen from './components/ConfigNeededScreen';
 import { getMoodleAnswerStream } from './services/geminiService';
-
-// This is a placeholder that will be replaced by the build process
-// on a hosting platform like Vercel. For local development, it will be empty.
-const apiKey = process.env.API_KEY || '';
 
 export default function App() {
   const [status, setStatus] = useState<AppStatus>(AppStatus.AWAITING_UPLOAD);
   const [knowledgeBase, setKnowledgeBase] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const isApiKeyConfigured = useMemo(() => !!apiKey, []);
 
   const initialBotMessageText = "Tu documentación de Moodle ha sido procesada. Estoy listo para responder tus preguntas basándome en lo que has proporcionado.";
 
@@ -65,7 +59,7 @@ export default function App() {
     setError(null);
 
     try {
-      const stream = await getMoodleAnswerStream(prompt, knowledgeBase);
+      const stream = getMoodleAnswerStream(prompt, knowledgeBase);
       const sourceMap = new Map<string, Source>();
       
       for await (const chunk of stream) {
@@ -128,10 +122,6 @@ export default function App() {
       },
     ]);
   }, [initialBotMessageText]);
-  
-  if (!isApiKeyConfigured) {
-    return <ConfigNeededScreen />;
-  }
 
   return (
     <div className="flex flex-col h-screen font-sans bg-gray-50 text-gray-800">

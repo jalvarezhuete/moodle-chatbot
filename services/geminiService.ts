@@ -1,46 +1,67 @@
-import { GoogleGenAI } from "@google/genai";
 
-const model = "gemini-2.5-flash-preview-04-17";
+interface StreamChunk {
+    text: string;
+    candidates?: {
+        groundingMetadata?: {
+            groundingChunks?: {
+                web?: {
+                    uri: string;
+                    title?: string;
+                };
+            }[];
+        };
+    }[];
+}
 
-const systemInstruction = `Eres un asistente experto especializado en el Sistema de Gestión de Aprendizaje (LMS) Moodle. Tu objetivo es responder a las preguntas de los usuarios de la manera más útil posible.
+export async function* getMoodleAnswerStream(query: string, context: string): AsyncGenerator<StreamChunk> {
+    const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query, context }),
+    });
 
-Tienes dos herramientas a tu disposición:
-1. Un conjunto de documentos proporcionados (CONTEXTO).
-2. Búsqueda de Google.
-
-Sigue estas reglas para responder:
-1. **Prioriza el CONTEXTO**: Primero, busca la respuesta en los documentos de Moodle proporcionados en el CONTEXTO. Basa tu respuesta en esta información si es relevante.
-2. **Usa la Búsqueda de Google si es necesario**: Si la pregunta del usuario trata sobre una versión de Moodle diferente a la del CONTEXTO, o si no puedes encontrar una respuesta en el CONTEXTO, utiliza la Búsqueda de Google para encontrar la información más actualizada.
-3. **Cita tus fuentes**: Cuando uses la Búsqueda de Google, DEBES citar las fuentes de tu respuesta.
-4. **Respuesta cuando no encuentres nada**: Si después de buscar tanto en el CONTEXTO como en la Búsqueda de Google no puedes encontrar una respuesta relevante, informa al usuario que no pudiste encontrar la información.
-5. **Idioma**: Responde siempre en español.`;
-
-
-export async function getMoodleAnswerStream(query: string, context: string) {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        throw new Error("La clave API de Google no está configurada. El propietario de la aplicación debe configurarla en el servidor.");
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error de red o respuesta no válida.' }));
+        throw new Error(errorData.error || `Error del servidor: ${response.status}`);
     }
-    const ai = new GoogleGenAI({ apiKey: apiKey });
-    
-    const fullPrompt = `CONTEXTO:
----
-${context}
----
-PREGUNTA: ${query}`;
-    
-    try {
-        const response = await ai.models.generateContentStream({
-            model: model,
-            contents: fullPrompt,
-            config: {
-                systemInstruction: systemInstruction,
-                tools: [{ googleSearch: {} }],
-            },
-        });
-        return response;
-    } catch (error) {
-        console.error("Gemini API Error:", error);
-        throw new Error("Fallo al obtener respuesta de la IA. El servicio puede no estar disponible o mal configurado.");
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        throw new Error("No se pudo obtener el lector de la respuesta del servidor.");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+            if (line.trim()) {
+                try {
+                    yield JSON.parse(line);
+                } catch (e) {
+                    console.error("Error al parsear línea del stream JSON:", line, e);
+                }
+            }
+        }
+    }
+
+    if (buffer.trim()) {
+       try {
+            yield JSON.parse(buffer);
+        } catch (e) {
+            console.error("Error al parsear buffer final del stream JSON:", buffer, e);
+        }
     }
 }
