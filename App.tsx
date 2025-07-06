@@ -1,40 +1,18 @@
-
-import React, { useState, useCallback } from 'react';
-import { AppStatus, ChatMessage, MessageSender, Source } from './types';
-import { AppTitle, MoodleIcon, TrashIcon, ReloadIcon } from './constants';
-import PdfUploader from './components/PdfUploader';
+import React, { useState, useCallback, useEffect } from 'react';
+import { AppStatus, ChatMessage, MessageSender, Source, GeminiHistoryEntry } from './types';
+import { AppTitle, MoodleIcon, TrashIcon } from './constants';
 import ChatInterface from './components/ChatInterface';
 import { getMoodleAnswerStream } from './services/geminiService';
 
+const initialBotMessage: ChatMessage = {
+  id: 'initial-bot-message',
+  sender: MessageSender.BOT,
+  text: '¡Hola! Soy tu asistente experto en Moodle. Mi conocimiento se basa en la documentación oficial y puedo buscar en la web para temas específicos. ¿En qué puedo ayudarte hoy?',
+};
+
 export default function App() {
-  const [status, setStatus] = useState<AppStatus>(AppStatus.AWAITING_UPLOAD);
-  const [knowledgeBase, setKnowledgeBase] = useState<string>('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const initialBotMessageText = "Tu documentación de Moodle ha sido procesada. Estoy listo para responder tus preguntas basándome en lo que has proporcionado.";
-
-  const handleDocumentsProcessed = useCallback((text: string) => {
-    setKnowledgeBase(text);
-    setStatus(AppStatus.READY_TO_CHAT);
-    setMessages([
-      {
-        id: 'initial-bot-message',
-        sender: MessageSender.BOT,
-        text: initialBotMessageText,
-      },
-    ]);
-  }, [initialBotMessageText]);
-
-  const handleProcessingStart = useCallback(() => {
-    setStatus(AppStatus.PROCESSING_PDFS);
-    setError(null);
-  }, []);
-
-  const handleProcessingError = useCallback((errorMessage: string) => {
-      setError(errorMessage);
-      setStatus(AppStatus.AWAITING_UPLOAD);
-  }, []);
+  const [status, setStatus] = useState<AppStatus>(AppStatus.READY);
+  const [messages, setMessages] = useState<ChatMessage[]>([initialBotMessage]);
 
   const handleSendMessage = useCallback(async (prompt: string) => {
     if (!prompt.trim() || status === AppStatus.GENERATING_ANSWER) return;
@@ -54,12 +32,20 @@ export default function App() {
       sources: [],
     };
 
-    setMessages(prev => [...prev, userMessage, botMessagePlaceholder]);
+    const currentMessages = [...messages, userMessage, botMessagePlaceholder];
+    setMessages(currentMessages);
     setStatus(AppStatus.GENERATING_ANSWER);
-    setError(null);
+
+    // Construct history for the API, excluding the placeholder message
+    const history: GeminiHistoryEntry[] = currentMessages
+      .slice(0, -1) // Exclude the bot placeholder
+      .map(msg => ({
+          role: msg.sender === MessageSender.USER ? 'user' : 'model',
+          parts: [{ text: msg.text }]
+      }));
 
     try {
-      const stream = getMoodleAnswerStream(prompt, knowledgeBase);
+      const stream = getMoodleAnswerStream(prompt, history);
       const sourceMap = new Map<string, Source>();
       
       for await (const chunk of stream) {
@@ -102,68 +88,44 @@ export default function App() {
       }
       setMessages(prev => [...prev.slice(0, -1), errorBotMessage]);
     } finally {
-      setStatus(AppStatus.READY_TO_CHAT);
+      setStatus(AppStatus.READY);
     }
-  }, [knowledgeBase, status]);
-
-  const handleReset = useCallback(() => {
-    setStatus(AppStatus.AWAITING_UPLOAD);
-    setKnowledgeBase('');
-    setMessages([]);
-    setError(null);
-  }, []);
+  }, [messages, status]);
 
   const handleClearChat = useCallback(() => {
     setMessages([
       {
-        id: 'initial-bot-message-cleared',
-        sender: MessageSender.BOT,
-        text: initialBotMessageText,
-      },
+        ...initialBotMessage,
+        id: `initial-bot-message-${Date.now()}`,
+      }
     ]);
-  }, [initialBotMessageText]);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen font-sans bg-gray-50 text-gray-800">
       <header className="flex items-center p-4 border-b border-gray-200 bg-white shadow-sm">
         <MoodleIcon />
         <h1 className="text-xl font-bold ml-3">{AppTitle}</h1>
-        {status === AppStatus.READY_TO_CHAT && (
-           <div className="ml-auto flex items-center space-x-3">
-             <button onClick={handleClearChat} className="flex items-center space-x-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
-               <TrashIcon />
-               <span>Borrar Chat</span>
-             </button>
-             <button onClick={handleReset} className="flex items-center space-x-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
-              <ReloadIcon />
-               <span>Subir Nuevos Docs</span>
-             </button>
-           </div>
-        )}
+        <div className="ml-auto flex items-center space-x-3">
+            <button onClick={handleClearChat} className="flex items-center space-x-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+            <TrashIcon />
+            <span>Borrar Chat</span>
+            </button>
+        </div>
       </header>
       
       <main className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
         <div className="w-full max-w-4xl h-full flex flex-col">
-        {status === AppStatus.AWAITING_UPLOAD || status === AppStatus.PROCESSING_PDFS ? (
-          <PdfUploader 
-            onProcessStart={handleProcessingStart}
-            onProcessComplete={handleDocumentsProcessed}
-            onProcessError={handleProcessingError}
-            isProcessing={status === AppStatus.PROCESSING_PDFS}
-            error={error}
-          />
-        ) : (
           <ChatInterface 
             messages={messages} 
             onSendMessage={handleSendMessage}
             isSending={status === AppStatus.GENERATING_ANSWER}
           />
-        )}
         </div>
       </main>
 
        <footer className="text-center p-3 text-xs text-gray-400 border-t border-gray-200 bg-white">
-        Desarrollado con la API de Gemini. Las respuestas se basan en los documentos subidos y, si es necesario, en búsquedas web.
+        Desarrollado con la API de Gemini. Las respuestas se basan en conocimiento precargado de Moodle y búsquedas web.
       </footer>
     </div>
   );

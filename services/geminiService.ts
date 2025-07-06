@@ -1,3 +1,4 @@
+import { GeminiHistoryEntry } from './types';
 
 interface StreamChunk {
     text: string;
@@ -13,13 +14,13 @@ interface StreamChunk {
     }[];
 }
 
-export async function* getMoodleAnswerStream(query: string, context: string): AsyncGenerator<StreamChunk> {
+export async function* getMoodleAnswerStream(query: string, history: GeminiHistoryEntry[]): AsyncGenerator<StreamChunk> {
     const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query, context }),
+        body: JSON.stringify({ query, history }),
     });
 
     if (!response.ok) {

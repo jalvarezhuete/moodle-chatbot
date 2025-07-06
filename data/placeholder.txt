@@ -1,0 +1,8 @@
+INSTRUCCIONES:
+
+1. Elimina este archivo.
+2. Convierte tus documentos PDF de Moodle a formato de texto plano (.txt).
+   (Puedes hacerlo abriendo el PDF, seleccionando todo el texto (Ctrl+A o Cmd+A), copiándolo (Ctrl+C o Cmd+C) y pegándolo en un editor de texto simple para guardarlo como un archivo .txt).
+3. Coloca todos tus archivos .txt en esta carpeta 'data'.
+
+La aplicación leerá automáticamente todos los archivos .txt de esta carpeta y los usará como su base de conocimiento.

@@ -1,7 +1,5 @@
 export enum AppStatus {
-  AWAITING_UPLOAD,
-  PROCESSING_PDFS,
-  READY_TO_CHAT,
+  READY,
   GENERATING_ANSWER,
 }
 
@@ -21,4 +19,10 @@ export interface ChatMessage {
   text: string;
   isStreaming?: boolean;
   sources?: Source[];
+}
+
+// Defines the structure for conversation history entries sent to the Gemini API
+export interface GeminiHistoryEntry {
+  role: 'user' | 'model';
+  parts: { text: string }[];
 }
